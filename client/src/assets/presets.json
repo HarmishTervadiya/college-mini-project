@@ -1,0 +1,61 @@
+[
+  {
+    "id": "web-1080p",
+    "name": "Web Standard 1080p",
+    "description": "Balanced H.264 profile optimized for YouTube, Vimeo, and web delivery",
+    "container": "mp4",
+    "videoCodec": "libx264",
+    "audioCodec": "aac",
+    "resolution": "1920x1080",
+    "preset": "medium",
+    "crf": 23,
+    "audioBitrate": "192k"
+  },
+  {
+    "id": "dense-hevc-4k",
+    "name": "Ultra HEVC 4K",
+    "description": "High-efficiency H.265 compression for 4K content with 50% bandwidth savings",
+    "container": "mp4",
+    "videoCodec": "libx265",
+    "audioCodec": "aac",
+    "resolution": "3840x2160",
+    "preset": "slow",
+    "crf": 20,
+    "audioBitrate": "320k"
+  },
+  {
+    "id": "mobile-lite-720p",
+    "name": "Mobile Lightweight 720p",
+    "description": "Compact file footprint with fast decode for low-bandwidth cellular environments",
+    "container": "mp4",
+    "videoCodec": "libx264",
+    "audioCodec": "aac",
+    "resolution": "1280x720",
+    "preset": "veryfast",
+    "crf": 26,
+    "audioBitrate": "128k"
+  },
+  {
+    "id": "webm-vp9-modern",
+    "name": "Open WebM VP9",
+    "description": "Royalty-free open media pipeline with Opus speech and music mastering",
+    "container": "webm",
+    "videoCodec": "libvpx-vp9",
+    "audioCodec": "libopus",
+    "resolution": "1920x1080",
+    "preset": "medium",
+    "crf": 28,
+    "audioBitrate": "128k"
+  },
+  {
+    "id": "audio-rip-flac",
+    "name": "Lossless Audio Master",
+    "description": "Extracts master audio tracks without compression or frequency clipping",
+    "container": "mkv",
+    "videoCodec": "copy",
+    "audioCodec": "flac",
+    "resolution": "source",
+    "preset": "medium",
+    "crf": 0
+  }
+]
