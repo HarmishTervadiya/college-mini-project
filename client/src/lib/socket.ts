@@ -1,147 +1,85 @@
-import { io, Socket } from "socket.io-client";
-import { VideoJob } from "../utils/mock-data";
+import { io, type Socket } from "socket.io-client";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
 
-class SocketService {
+export type JobStatus = "processing" | "completed" | "failed";
+
+export interface JobUpdateEvent {
+  jobId: string;
+  status: JobStatus;
+  downloadUrls: string[];
+  error?: string;
+}
+
+type JobUpdateHandler = (event: JobUpdateEvent) => void;
+type StatusHandler = (connected: boolean) => void;
+
+class JobSocket {
   private socket: Socket | null = null;
-  private listeners: Map<string, Set<(data: any) => void>> = new Map();
-  private mockIntervals: Map<string, number> = new Map();
+  private updateHandlers = new Set<JobUpdateHandler>();
+  private statusHandlers = new Set<StatusHandler>();
+  private started = false;
 
-  constructor() {
-    this.init();
-  }
+  start() {
+    if (this.started) return;
+    this.started = true;
 
-  private init() {
     try {
       this.socket = io(SOCKET_URL, {
-        reconnectionAttempts: 3,
-        timeout: 4000,
+        reconnectionAttempts: 5,
+        timeout: 5000,
         transports: ["websocket", "polling"],
-        autoConnect: true
       });
 
-      this.socket.on("connect", () => {
-        this.emitLocal("connection_status", { status: "connected" });
+      this.socket.on("connect", () => this.notifyStatus(true));
+      this.socket.on("disconnect", () => this.notifyStatus(false));
+      this.socket.on("connect_error", () => this.notifyStatus(false));
+      this.socket.on("job_update", (raw: unknown) => {
+        const event = normalizeJobUpdate(raw);
+        if (event) this.notifyUpdate(event);
       });
-
-      this.socket.on("disconnect", () => {
-        this.emitLocal("connection_status", { status: "disconnected" });
-      });
-
-      this.socket.on("connect_error", () => {
-        this.emitLocal("connection_status", { status: "fallback_simulation" });
-      });
-
-      this.socket.on("job_update", (data: any) => {
-        const jobId = String(data?.jobId);
-        if (data?.status === "processing") {
-          this.emitLocal("job:progress", {
-            jobId,
-            progress: 50,
-            fps: 54.0,
-            speed: "2.1x",
-            status: "processing",
-            log: `[worker] Job ${jobId} is currently processing on transcoding node`
-          });
-        } else if (data?.status === "completed") {
-          const downloadUrl = data?.downloadUrls?.[0] || "";
-          this.emitLocal("job:completed", {
-            jobId,
-            status: "completed",
-            progress: 100,
-            outputUrl: downloadUrl,
-            downloadUrls: data?.downloadUrls || [],
-            completedAt: new Date().toISOString(),
-            log: `[worker] Job ${jobId} completed successfully`
-          });
-        } else if (data?.status === "failed") {
-          this.emitLocal("job:failed", {
-            jobId,
-            status: "failed",
-            error: data?.error || "Worker transcoding job failed"
-          });
-        }
-      });
-
-      this.socket.on("job:progress", (data) => this.emitLocal("job:progress", data));
-      this.socket.on("job:log", (data) => this.emitLocal("job:log", data));
-      this.socket.on("job:completed", (data) => this.emitLocal("job:completed", data));
-      this.socket.on("job:failed", (data) => this.emitLocal("job:failed", data));
     } catch {
-      this.emitLocal("connection_status", { status: "fallback_simulation" });
+      this.notifyStatus(false);
     }
   }
 
-  public on(event: string, callback: (data: any) => void): () => void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)!.add(callback);
-
+  onUpdate(handler: JobUpdateHandler): () => void {
+    this.updateHandlers.add(handler);
     return () => {
-      this.listeners.get(event)?.delete(callback);
+      this.updateHandlers.delete(handler);
     };
   }
 
-  private emitLocal(event: string, data: any) {
-    const callbacks = this.listeners.get(event);
-    if (callbacks) {
-      callbacks.forEach((cb) => cb(data));
-    }
+  onStatus(handler: StatusHandler): () => void {
+    this.statusHandlers.add(handler);
+    return () => {
+      this.statusHandlers.delete(handler);
+    };
   }
 
-  public simulateJobProgress(job: VideoJob) {
-    if (this.mockIntervals.has(job.id)) {
-      clearInterval(this.mockIntervals.get(job.id));
-    }
-
-    let progress = job.progress || 10;
-    let frame = 120;
-
-    const interval = window.setInterval(() => {
-      progress += Math.floor(Math.random() * 8) + 4;
-      frame += Math.floor(Math.random() * 45) + 30;
-
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        this.mockIntervals.delete(job.id);
-
-        this.emitLocal("job:completed", {
-          jobId: job.id,
-          status: "completed",
-          progress: 100,
-          outputUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-          completedAt: new Date().toISOString(),
-          outputSize: Math.floor(job.originalSize * 0.45),
-          log: `[ffmpeg] video:${Math.floor(job.originalSize * 0.4 / 1024)}kB muxing complete. Success.`
-        });
-      } else {
-        const fps = (45 + Math.random() * 15).toFixed(1);
-        const speed = (1.8 + Math.random() * 0.6).toFixed(2);
-        const logLine = `[ffmpeg] frame=${frame} fps=${fps} q=23.0 size=${Math.floor(progress * 1200)}kB speed=${speed}x`;
-
-        this.emitLocal("job:progress", {
-          jobId: job.id,
-          progress,
-          fps: parseFloat(fps),
-          speed: `${speed}x`,
-          status: "processing",
-          log: logLine
-        });
-      }
-    }, 1200);
-
-    this.mockIntervals.set(job.id, interval);
+  private notifyUpdate(event: JobUpdateEvent) {
+    this.updateHandlers.forEach((handler) => handler(event));
   }
 
-  public cancelSimulation(jobId: string) {
-    if (this.mockIntervals.has(jobId)) {
-      clearInterval(this.mockIntervals.get(jobId));
-      this.mockIntervals.delete(jobId);
-    }
+  private notifyStatus(connected: boolean) {
+    this.statusHandlers.forEach((handler) => handler(connected));
   }
 }
 
-export const socketService = new SocketService();
+function normalizeJobUpdate(raw: unknown): JobUpdateEvent | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const record = raw as Record<string, unknown>;
+  const jobId = record.jobId;
+  const status = record.status;
+  if ((typeof jobId !== "string" && typeof jobId !== "number") || typeof status !== "string") {
+    return null;
+  }
+  if (status !== "processing" && status !== "completed" && status !== "failed") return null;
+  const downloadUrls = Array.isArray(record.downloadUrls)
+    ? record.downloadUrls.filter((url): url is string => typeof url === "string")
+    : [];
+  const error = typeof record.error === "string" ? record.error : undefined;
+  return { jobId: String(jobId), status, downloadUrls, error };
+}
+
+export const jobSocket = new JobSocket();

@@ -1,45 +1,49 @@
 import React from "react";
 import { cn } from "../../utils/cn";
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-  error?: string;
+interface FieldProps {
+  label: string;
+  htmlFor?: string;
   hint?: string;
-  icon?: React.ReactNode;
+  error?: string;
+  children: React.ReactNode;
+}
+
+export const Field: React.FC<FieldProps> = ({ label, htmlFor, hint, error, children }) => {
+  return (
+    <div className="w-full">
+      <label htmlFor={htmlFor} className="block text-sm font-medium text-slate-700 mb-1">
+        {label}
+      </label>
+      {children}
+      {error ? (
+        <p className="text-sm text-red-600 mt-1">{error}</p>
+      ) : hint ? (
+        <p className="text-sm text-slate-500 mt-1">{hint}</p>
+      ) : null}
+    </div>
+  );
+};
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  error?: boolean;
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, hint, icon, type = "text", ...props }, ref) => {
+  ({ className, error, ...props }, ref) => {
     return (
-      <div className="w-full space-y-1.5">
-        {label && (
-          <label className="block text-xs font-medium text-surface-300">
-            {label}
-          </label>
+      <input
+        ref={ref}
+        className={cn(
+          "w-full bg-white border rounded-md px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-1 disabled:bg-slate-100 disabled:opacity-60",
+          error ? "border-red-500" : "border-slate-300",
+          className
         )}
-        <div className="relative flex items-center">
-          {icon && (
-            <div className="absolute left-3 text-surface-500 pointer-events-none flex items-center">
-              {icon}
-            </div>
-          )}
-          <input
-            type={type}
-            ref={ref}
-            className={cn(
-              "w-full bg-surface-900 border border-surface-800 rounded-lg px-3 py-2 text-xs text-surface-100 placeholder:text-surface-500 transition-colors focus:outline-none focus:border-surface-600 focus:ring-1 focus:ring-surface-600 disabled:opacity-50 disabled:bg-surface-950",
-              icon && "pl-9",
-              error && "border-rose-700/80 focus:border-rose-500 focus:ring-rose-500",
-              className
-            )}
-            {...props}
-          />
-        </div>
-        {error && <p className="text-[11px] text-rose-400">{error}</p>}
-        {hint && !error && <p className="text-[11px] text-surface-500">{hint}</p>}
-      </div>
+        {...props}
+      />
     );
   }
 );
 
 Input.displayName = "Input";
+
